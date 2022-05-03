@@ -1,0 +1,79 @@
+---
+title: "PUB-Final Project"
+date: Ruiji Sun, April 30, 2022
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(caret)
+library(mltools)
+library(data.table)
+library(dplyr)
+```
+
+1.MSM
+$$\beta(\mathbb{P}_{U,C}|m)=argmin_{\beta'}\mathbb{E}_{U,C}[\Sigma_{t\in T}(Y_t - m(t|\beta'))^2]$$
+EstA:
+$$m(t|\beta) = \beta_0 + \beta_1 t + \beta_2 C$$
+EstB:
+$$m(t|\beta) = \beta_0 + \beta_1 t + \beta_2 C + \beta_3 tC$$
+
+
+2. Regression
+```{r reg}
+ObsData <- read.csv(file = "delirium.csv", header = TRUE)
+head(ObsData, 10)
+summary(ObsData)
+# surgery site one-hot encoding
+ObsData$SURGSITE <- as.factor(ObsData$SURGSITE)
+ObsData <- one_hot(as.data.table(ObsData))
+# select covariates
+X <- select(ObsData, c(y,Prodose,
+                       Age,Gender,
+                       Delirium,Dementia,Depress,StrokeOrTIA,Charlest,HOCNS,
+                       ETOH,cursmoke,
+                       SURGSITE_1, SURGSITE_2, SURGSITE_3))
+head(X)
+EstA <- glm(y ~ Prodose+Age+Gender+
+                Delirium+Dementia+Depress+StrokeOrTIA+Charlest+HOCNS+
+                ETOH+cursmoke+
+                SURGSITE_1+ SURGSITE_2+ SURGSITE_3,
+            data=X, family = "binomial")
+EstB <- glm(y ~ (Prodose+Age+Gender+
+                Delirium+Dementia+Depress+StrokeOrTIA+Charlest+HOCNS+
+                ETOH+cursmoke+
+                SURGSITE_1+ SURGSITE_2+ SURGSITE_3)^2,
+            data=X, family = "binomial")
+```
+
+3. ATE
+```{r ate, warning=FALSE}
+doseResp <- matrix(NA, nrow=100, ncol=3)
+head(doseResp)
+for (t in 1:100) {
+  dose <- ObsData
+  dose$Prodose <- t*100
+  RespA <- predict(EstA, newdata=dose, type='response')
+  RespB <- predict(EstB, newdata=dose, type='response')
+  doseResp[t,]<- c(t*100, mean(RespA), mean(RespB))
+}
+doseResp.df <-  as.data.frame(doseResp)
+head(doseResp.df)
+```
+4. OR
+```{r or}
+exp(EstB$coefficients[2])
+```
+
+5. Draw
+```{r draw}
+plot(y ~ Prodose, data=ObsData)
+# EstA
+lines(V2 ~ V1, doseResp, lwd=2, col="blue")
+# EstB
+lines(V3 ~ V1, doseResp, lwd=2, col="red")
+abline(h = 0.5, lty = 2)
+```
+
+
